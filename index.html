@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shop Manager</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; background: #f4f4f4; }
+  h1 { background: #1b5e20; color: white; margin: 0; padding: 14px; font-size: 20px; }
+  .box { background: white; margin: 10px; padding: 12px; border-radius: 8px; }
+  input { width: 100%; padding: 10px; margin: 5px 0; box-sizing: border-box; font-size: 16px; }
+  button { background: #1b5e20; color: white; border: 0; padding: 10px 14px; font-size: 16px; border-radius: 6px; }
+  .del { background: #b71c1c; padding: 6px 10px; font-size: 14px; }
+  .item { border-bottom: 1px solid #ddd; padding: 8px 0; }
+</style>
+</head>
+<body>
+
+<h1>Shop Manager</h1>
+
+<div class="box">
+  <h3>Add Product</h3>
+  <input id="name" placeholder="Product name">
+  <input id="cost" type="number" placeholder="Cost price (what you paid)">
+  <input id="price" type="number" placeholder="Selling price">
+  <input id="qty" type="number" placeholder="Quantity in stock">
+  <button onclick="addProduct()">Save Product</button>
+</div>
+
+<div class="box">
+  <h3>Stock</h3>
+  <div id="list"></div>
+</div>
+<div class="box">
+  <h3>New Sale</h3>
+  <select id="saleProduct" style="width:100%;padding:10px;font-size:16px;margin:5px 0;"></select>
+  <input id="saleQty" type="number" placeholder="Quantity sold">
+  <button onclick="addSale()">Save Sale</button>
+</div>
+
+<div class="box">
+  <h3>Today's Sales</h3>
+  <div id="todaySales"></div>
+</div><div class="box">
+  <h3>New Expense</h3>
+  <input id="expNote" placeholder="What was it for? (rent, transport...)">
+  <input id="expAmount" type="number" placeholder="Amount">
+  <button onclick="addExpense()">Save Expense</button>
+</div>
+
+<div class="box">
+  <h3>Today's Expenses</h3>
+  <div id="todayExpenses"></div>
+</div><div class="box">
+  <h3>Reports</h3>
+  <button onclick="showReport('today')">Today</button>
+  <button onclick="showReport('week')">Week</button>
+  <button onclick="showReport('month')">Month</button>
+  <button onclick="showReport('year')">Year</button>
+  <button onclick="showReport('all')">All</button>
+  <div id="report" style="margin-top:12px;"></div>
+</div><div class="box">
+  <h3>Backup</h3>
+  <button onclick="backupData()">Save Backup</button>
+  <p>Restore from a backup file:</p>
+  <input type="file" id="restoreFile" accept=".json" onchange="restoreData(event)">
+</div><div class="box">
+  <h3>Backup as Text</h3>
+  <button onclick="showBackupText()">Show Backup Text</button>
+  <button onclick="restoreFromText()">Restore From Text</button>
+  <textarea id="backupText" rows="6" style="width:100%;margin-top:8px;font-size:14px;box-sizing:border-box;" placeholder="Backup text appears here. To restore, paste your saved text here and tap Restore From Text."></textarea>
+</div>
+<script>
+  // Load saved products from the phone, or start with an empty list
+  let products = JSON.parse(localStorage.getItem("products")) || [];
+
+  function save() {
+    localStorage.setItem("products", JSON.stringify(products));
+  }
+
+  function addProduct() {
+    let name = document.getElementById("name").value.trim();
+    let cost = Number(document.getElementById("cost").value);
+    let price = Number(document.getElementById("price").value);
+    let qty = Number(document.getElementById("qty").value);
+
+    if (name === "" || price <= 0) {
+      alert("Please enter at least a name and a selling price.");
+      return;
+    }
+
+    products.push({ id: Date.now(), name: name, cost: cost, price: price, qty: qty });
+    save();
+    showProducts();
+
+    document.getElementById("name").value = "";
+    document.getElementById("cost").value = "";
+    document.getElementById("price").value = "";
+    document.getElementById("qty").value = "";
+  }
+
+  function deleteProduct(id) {
+    if (!confirm("Delete this product?")) return;
+    products = products.filter(p => p.id !== id);
+    save();
+    showProducts();
+  }
+
+  function showProducts() {
+    let html = "";
+    if (products.length === 0) html = "<p>No products yet.</p>";
+    products.forEach(p => {
+      html += `<div class="item">
+        <b>${p.name}</b><br>
+        Cost: ${p.cost} | Price: ${p.price}<br>
+        In stock: <b>${p.qty}</b>
+        <button class="del" onclick="deleteProduct(${p.id})">Delete</button>
+      </div>`;
+    });
+    document.getElementById("list").innerHTML = html;
+    fillSelect();
+  }
+
+  let sales = JSON.parse(localStorage.getItem("sales")) || [];
+
+function saveSales() {
+  localStorage.setItem("sales", JSON.stringify(sales));
+}
+
+function today() {
+  let d = new Date();
+  let m = String(d.getMonth() + 1).padStart(2, "0");
+  let day = String(d.getDate()).padStart(2, "0");
+  return d.getFullYear() + "-" + m + "-" + day;
+}
+
+function fillSelect() {
+  let html = "";
+  products.forEach(p => {
+    html += `<option value="${p.id}">${p.name} (${p.qty} left)</option>`;
+  });
+  if (products.length === 0) html = "<option>Add a product first</option>";
+  document.getElementById("saleProduct").innerHTML = html;
+}
+
+function addSale() {
+  let id = Number(document.getElementById("saleProduct").value);
+  let qty = Number(document.getElementById("saleQty").value);
+  let p = products.find(x => x.id === id);
+
+  if (!p || qty <= 0) {
+    alert("Choose a product and enter a quantity.");
+    return;
+  }
+  if (qty > p.qty) {
+    alert("Not enough stock. Only " + p.qty + " left.");
+    return;
+  }
+
+  p.qty = p.qty - qty;
+  sales.push({ id: Date.now(), name: p.name, qty: qty, price: p.price, cost: p.cost, date: today() });
+  save();
+  saveSales();
+  showProducts();
+  showSales();
+  document.getElementById("saleQty").value = "";
+}
+
+function showSales() {
+  let html = "";
+  let total = 0;
+  sales.filter(s => s.date === today()).forEach(s => {
+    let amount = s.qty * s.price;
+    total += amount;
+    html += `<div class="item">${s.name} × ${s.qty} = <b>${amount}</b></div>`;
+  });
+  if (html === "") html = "<p>No sales today.</p>";
+  else html += `<p><b>Total today: ${total}</b></p>`;
+  document.getElementById("todaySales").innerHTML = html;
+}
+
+let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+
+function saveExpenses() {
+  localStorage.setItem("expenses", JSON.stringify(expenses));
+}
+
+function addExpense() {
+  let note = document.getElementById("expNote").value.trim();
+  let amount = Number(document.getElementById("expAmount").value);
+
+  if (note === "" || amount <= 0) {
+    alert("Enter what it was for and the amount.");
+    return;
+  }
+
+  expenses.push({ id: Date.now(), note: note, amount: amount, date: today() });
+  saveExpenses();
+  showExpenses();
+  document.getElementById("expNote").value = "";
+  document.getElementById("expAmount").value = "";
+}
+
+function deleteExpense(id) {
+  if (!confirm("Delete this expense?")) return;
+  expenses = expenses.filter(e => e.id !== id);
+  saveExpenses();
+  showExpenses();
+}
+
+function showExpenses() {
+  let html = "";
+  let total = 0;
+  expenses.filter(e => e.date === today()).forEach(e => {
+    total += e.amount;
+    html += `<div class="item">${e.note}: <b>${e.amount}</b>
+      <button class="del" onclick="deleteExpense(${e.id})">Delete</button></div>`;
+  });
+  if (html === "") html = "<p>No expenses today.</p>";
+  else html += `<p><b>Total today: ${total}</b></p>`;
+  document.getElementById("todayExpenses").innerHTML = html;
+}
+
+function fmt(d) {
+  let m = String(d.getMonth() + 1).padStart(2, "0");
+  let day = String(d.getDate()).padStart(2, "0");
+  return d.getFullYear() + "-" + m + "-" + day;
+}
+
+function startOf(period) {
+  let d = new Date();
+  if (period === "all") return "0000-00-00";
+  if (period === "week") {
+    let diff = d.getDay() === 0 ? 6 : d.getDay() - 1; // week starts Monday
+    d.setDate(d.getDate() - diff);
+  }
+  if (period === "month") d.setDate(1);
+  if (period === "year") { d.setMonth(0); d.setDate(1); }
+  return fmt(d);
+}
+
+function showReport(period) {
+  let start = startOf(period);
+  let end = today();
+
+  let income = 0, goodsCost = 0, spent = 0;
+
+  sales.forEach(s => {
+    if (s.date >= start && s.date <= end) {
+      income += s.qty * s.price;
+      goodsCost += s.qty * s.cost;
+    }
+  });
+
+  expenses.forEach(e => {
+    if (e.date >= start && e.date <= end) spent += e.amount;
+  });
+
+  let profit = income - goodsCost - spent;
+  let color = profit >= 0 ? "#1b5e20" : "#b71c1c";
+
+  document.getElementById("report").innerHTML = `
+    <div class="item">Sales income: <b>${income}</b></div>
+    <div class="item">Cost of goods sold: <b>${goodsCost}</b></div>
+    <div class="item">Expenses: <b>${spent}</b></div>
+    <div class="item" style="font-size:20px;color:${color};">
+      Profit: <b>${profit}</b>
+    </div>`;
+}
+
+function backupData() {
+  let data = { products: products, sales: sales, expenses: expenses };
+  let blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+  let link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "shop-backup-" + today() + ".json";
+  link.click();
+}
+
+function restoreData(event) {
+  let file = event.target.files[0];
+  if (!file) return;
+
+  let reader = new FileReader();
+  reader.onload = function () {
+    try {
+      let data = JSON.parse(reader.result);
+      if (!data.products || !data.sales || !data.expenses) throw new Error();
+      if (!confirm("This will replace all current data. Continue?")) return;
+
+      products = data.products;
+      sales = data.sales;
+      expenses = data.expenses;
+      save();
+      saveSales();
+      saveExpenses();
+
+      showProducts();
+      showSales();
+      showExpenses();
+      showReport("today");
+      alert("Data restored.");
+    } catch (e) {
+      alert("This is not a valid backup file.");
+    }
+  };
+  reader.readAsText(file);
+}
+
+function showBackupText() {
+  let data = { products: products, sales: sales, expenses: expenses };
+  let box = document.getElementById("backupText");
+  box.value = JSON.stringify(data);
+  box.select();
+  try { document.execCommand("copy"); alert("Backup copied. Paste it in a safe place."); }
+  catch (e) { alert("Press and hold the text, then choose Copy."); }
+}
+
+function restoreFromText() {
+  let text = document.getElementById("backupText").value.trim();
+  try {
+    let data = JSON.parse(text);
+    if (!data.products || !data.sales || !data.expenses) throw new Error();
+    if (!confirm("This will replace all current data. Continue?")) return;
+
+    products = data.products;
+    sales = data.sales;
+    expenses = data.expenses;
+    save();
+    saveSales();
+    saveExpenses();
+
+    showProducts();
+    showSales();
+    showExpenses();
+    showReport("today");
+    alert("Data restored.");
+  } catch (e) {
+    alert("This is not valid backup text.");
+  }
+}
+</script>
+
+</body>
+</html>
